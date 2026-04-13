@@ -1,8 +1,9 @@
 # Etapa 1: Build da imagem nativa com GraalVM
 FROM ghcr.io/graalvm/native-image-community:21 AS builder
 
-# Instalar dependências necessárias para compilação nativa no Linux
-RUN microdnf install -y gcc glibc-devel zlib-devel libstdc++-static
+# Instalar apenas o necessário. O 'gcc' e 'glibc-devel' base já costumam estar presentes.
+# Adicionamos o zlib-devel que é essencial para o Spring Boot nativo.
+RUN microdnf install -y zlib-devel
 
 WORKDIR /build
 
@@ -20,22 +21,19 @@ RUN ./mvnw dependency:go-offline -B
 # Copia o código-fonte
 COPY src ./src
 
-# --- AJUSTE AQUI ---
-# Para não ignorar AOT e buildar nativamente:
-# 1. 'process-aot' é chamado automaticamente pelo 'native:compile' no Spring Boot 3+
-# 2. Removamos o 'package' solto para evitar builds duplos (jar + native)
+# Executa o build nativo
+# O Spring Boot 3/4 processa o AOT automaticamente durante o 'native:compile'
 RUN ./mvnw clean native:compile -Pnative -B -DskipTests
 
-# Etapa 2: Imagem final ultra-reduzida
-# Usando distroless ou uma base mínima para maior performance e segurança
+# Etapa 2: Imagem final (Runtime)
 FROM ubuntu:22.04
 
 WORKDIR /app
 
-# Bibliotecas necessárias para rodar o binário (dynamic linking)
-RUN apt-get update && apt-get install -y libstdc++6 libc6 && rm -rf /var/lib/apt/lists/*
+# Instala apenas as libs de runtime necessárias
+RUN apt-get update && apt-get install -y libc6 libstdc++6 zlib1g && rm -rf /var/lib/apt/lists/*
 
-# Copia o binário gerado (o nome 'demo' vem do seu <artifactId> no pom.xml)
+# Copia o binário (ajuste 'demo' se o artifactId no pom.xml for diferente)
 COPY --from=builder /build/target/demo /app/demo
 
 EXPOSE 8080
