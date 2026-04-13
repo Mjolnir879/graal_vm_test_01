@@ -17,14 +17,14 @@ COPY src ./src
 
 # Compila o projeto construindo o executável nativo do GraalVM
 # O parâmetro -Pnative ativa o perfil nativo do Spring / GraalVM
-RUN ./mvnw clean package -Pnative -B -DskipTests
+RUN ./mvnw clean package native:compile -Pnative -B -DskipTests
 
 # Etapa 2: Rodar a aplicação em um sistema mínimo
 FROM ubuntu:22.04
 
 WORKDIR /app
 
-# Atualiza e garante que bibliotecas de compilação C/C++ padrão necessárias pelo binário estejam presentes 
+# Atualiza e garante que bibliotecas de compilação C/C++ padrão necessárias pelo binário estejam presentes
 # (embora o GraalVM já tente linkar nativamente o máximo possível)
 RUN apt-get update && apt-get install -y libc6 && rm -rf /var/lib/apt/lists/*
 

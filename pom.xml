@@ -94,6 +94,13 @@
 			<plugin>
 				<groupId>org.graalvm.buildtools</groupId>
 				<artifactId>native-maven-plugin</artifactId>
+				<configuration>
+					<mainClass>com.example.demo.DemoApplication</mainClass>
+					<classpathElements>
+						<classpathElement>${project.build.directory}/classes</classpathElement>
+						<classpathElement>${project.build.directory}/spring-aot/main/classes</classpathElement>
+					</classpathElements>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
