@@ -17,7 +17,7 @@ COPY src ./src
 
 # Compila o projeto construindo o executável nativo do GraalVM
 # O parâmetro -Pnative ativa o perfil nativo do Spring / GraalVM
-RUN ./mvnw clean native:compile -Pnative -B
+RUN ./mvnw clean package -Pnative -B
 
 # Etapa 2: Rodar a aplicação em um sistema mínimo
 FROM ubuntu:22.04
