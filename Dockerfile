@@ -13,8 +13,12 @@ COPY pom.xml .
 RUN mvn dependency:go-offline -B -q
 
 # Copy source and build native image
+# IMPORTANT: use 'package' (lifecycle phase) NOT 'native:compile' (direct goal).
+# 'package' triggers the full lifecycle including generate-sources, where
+# spring-boot:process-aot runs and generates DemoApplication__ApplicationContextInitializer.
+# Calling 'native:compile' directly SKIPS those phases → class never generated → AotInitializerNotFoundException at runtime.
 COPY src ./src
-RUN mvn -Pnative -DskipTests -B native:compile
+RUN mvn -Pnative -DskipTests -B package
 
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
