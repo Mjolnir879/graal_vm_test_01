@@ -22,10 +22,11 @@ COPY src ./src
 RUN ./mvnw -Pnative -DskipTests -B -e package
 
 # ── DIAGNOSTIC ─────────────────────────────────────────────────────────────
-RUN echo "=== target/ contents ==" && ls -la target/ && \
-    echo "=== spring-aot (if exists) ===" && \
-    find target/spring-aot -name "*.class" 2>/dev/null || echo "!! target/spring-aot NOT FOUND"
-# ─────────────────────────────────────────────────────────────────────────────
+RUN echo "=== ALL files in target/spring-aot ===" && \
+    find target/spring-aot -type f 2>/dev/null | sort || echo "!! spring-aot dir missing or empty"
+RUN echo "=== AOT Initializer in target/classes? ===" && \
+    find target/classes -name "*Initializer*" -o -name "*__*" 2>/dev/null | sort
+# ────────────────────────────────────────────────────────────────────────────
 
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
