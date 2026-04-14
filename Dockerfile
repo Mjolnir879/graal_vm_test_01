@@ -20,7 +20,7 @@ COPY src ./src
 # 1) 'package' roda o spring-boot:process-aot (gera target/spring-aot/main/classes)
 # 2) 'native:compile' lê o classpath configurado no pom.xml (incluindo o spring-aot)
 #    e gera o executável nativo em target/demo
-RUN mvn clean package native:compile -Pnative -B -DskipTests
+RUN mvn -Pnative native:compile -DskipTests -B
 
 # Etapa 2: Imagem de runtime mínima (~70 MB)
 FROM ubuntu:22.04
