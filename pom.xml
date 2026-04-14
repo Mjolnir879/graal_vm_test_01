@@ -146,12 +146,6 @@
 									<goal>compile-no-fork</goal>
 								</goals>
 								<phase>package</phase>
-								<configuration>
-									<!-- Inclui explicitamente as classes AOT geradas pelo process-aot -->
-									<classpath>
-										<param>${project.build.directory}/spring-aot/main/classes</param>
-									</classpath>
-								</configuration>
 							</execution>
 						</executions>
 					</plugin>
