@@ -4,36 +4,42 @@
 # =============================================================================
 FROM ghcr.io/graalvm/native-image-community:21 AS builder
 
-# Instala Maven diretamente do repositório oficial da Apache
-# e garante que o JAVA_HOME aponta para o GraalVM (não para outro JDK do PATH)
-# Maven não está incluído na imagem — instala sem sobrescrever o JAVA_HOME
-# que a própria imagem ghcr.io/graalvm/native-image-community já define corretamente
+# Instala Maven sem sobrescrever o JAVA_HOME que a imagem já define corretamente
 ENV MAVEN_HOME=/opt/apache-maven-3.9.6
 ENV PATH=$MAVEN_HOME/bin:$PATH
 
 RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.tar.gz \
     | tar -xzC /opt
 
+# Verifica que o ambiente está correto antes de qualquer coisa
+RUN echo "=== Java em uso ===" && java -version && \
+    echo "=== native-image ===" && native-image --version && \
+    echo "=== Maven ===" && mvn --version
+
 WORKDIR /build
 
 # ── Cache de dependências ────────────────────────────────────────────────────
-# Copia só o pom.xml primeiro para que o Docker só invalide o cache
-# quando as dependências mudarem, não quando o código muda.
 COPY pom.xml .
 RUN mvn dependency:go-offline -B -q
 
-# ── Build completo em um único comando ───────────────────────────────────────
-# O perfil "native" (herdado do spring-boot-starter-parent) habilita
-# AUTOMATICAMENTE as seguintes fases nesta ordem:
-#   1. compile               – compila o código Java
-#   2. spring-boot:process-aot – gera target/spring-aot/ com o initializer
-#   3. package               – empacota incluindo as classes AOT
-#   4. native:compile        – compila o executável nativo via GraalVM
+# ── Build nativo em dois goals explícitos ───────────────────────────────────
+# Não confiamos no binding automático do lifecycle (-Pnative package) pois
+# ele pode variar conforme a versão do plugin e do wrapper.
+# Em vez disso, chamamos os goals diretamente na ordem correta:
 #
-# IMPORTANTE: usar "package" como goal (não "native:compile" standalone)
-# garante que o lifecycle completo rode e as classes AOT estejam no classpath.
+#  1. spring-boot:process-aot  → gera target/spring-aot/ (o ApplicationContextInitializer)
+#  2. native:compile           → lê o classpath completo (incluindo AOT) e gera o binário
+#
+# O -DskipTests evita que testes rodem durante o build nativo.
 COPY src ./src
-RUN mvn -Pnative package -DskipTests -B
+RUN mvn -Pnative -DskipTests -B \
+        spring-boot:process-aot \
+        native:compile
+
+# Garante que o binário foi realmente gerado antes de prosseguir
+RUN test -f /build/target/demo || \
+    (echo "ERRO: binário nativo não foi gerado em target/demo" && \
+     echo "Conteúdo de target/:" && ls -la /build/target/ && exit 1)
 
 # =============================================================================
 # Estágio 2: Imagem de runtime mínima
