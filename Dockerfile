@@ -1,38 +1,53 @@
-# Etapa 1: Build nativo — usa imagem Graal com Maven embutido
-# Nota: ghcr.io/graalvm/native-image-community:21 é baseada no OL9 mas pode
-# ter conflitos de glibc. Usamos a variante "muslib" ou instalamos Maven via curl
-FROM ghcr.io/graalvm/native-image-community:21 AS graalvm
+# =============================================================================
+# Estágio 1: Build nativo
+# Usa a imagem oficial do GraalVM com native-image já instalado
+# =============================================================================
+FROM ghcr.io/graalvm/native-image-community:21 AS builder
 
-# Baixa o Maven sem precisar do microdnf (evita conflito glibc)
+# Instala Maven diretamente do repositório oficial da Apache
+# e garante que o JAVA_HOME aponta para o GraalVM (não para outro JDK do PATH)
+ENV JAVA_HOME=/usr/lib/jvm/java-21-graalvm
+ENV MAVEN_HOME=/opt/apache-maven-3.9.6
+ENV PATH=$MAVEN_HOME/bin:$PATH
+
 RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.tar.gz \
-    | tar -xzC /opt \
-    && ln -sf /opt/apache-maven-3.9.6/bin/mvn /usr/local/bin/mvn
+    | tar -xzC /opt
 
 WORKDIR /build
 
-# Baixa dependências (cache Docker separado do código-fonte)
+# ── Cache de dependências ────────────────────────────────────────────────────
+# Copia só o pom.xml primeiro para que o Docker só invalide o cache
+# quando as dependências mudarem, não quando o código muda.
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN mvn dependency:go-offline -B -q
 
-# Copia o código-fonte
+# ── Build completo em um único comando ───────────────────────────────────────
+# O perfil "native" (herdado do spring-boot-starter-parent) habilita
+# AUTOMATICAMENTE as seguintes fases nesta ordem:
+#   1. compile               – compila o código Java
+#   2. spring-boot:process-aot – gera target/spring-aot/ com o initializer
+#   3. package               – empacota incluindo as classes AOT
+#   4. native:compile        – compila o executável nativo via GraalVM
+#
+# IMPORTANTE: usar "package" como goal (não "native:compile" standalone)
+# garante que o lifecycle completo rode e as classes AOT estejam no classpath.
 COPY src ./src
+RUN mvn -Pnative package -DskipTests -B
 
-# 1) 'package' roda o ciclo completo incluindo spring-boot:process-aot
-#    (gera target/spring-aot/main/classes com o AOT initializer)
-# 2) 'native:compile' compila o executável nativo usando os artefatos AOT gerados
-RUN mvn -Pnative package -DskipTests -B \
-    && mvn -Pnative native:compile -DskipTests -B
-
-# Etapa 2: Imagem de runtime mínima (~70 MB)
+# =============================================================================
+# Estágio 2: Imagem de runtime mínima
+# =============================================================================
 FROM ubuntu:22.04
+
+# Dependências mínimas para executável nativo linkado dinamicamente (glibc)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libstdc++6 \
+    libc6 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libstdc++6 libc6 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=graalvm /build/target/demo /app/demo
+COPY --from=builder /build/target/demo /app/demo
 RUN chmod +x /app/demo
 
 EXPOSE 8080
