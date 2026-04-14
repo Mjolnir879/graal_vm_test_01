@@ -14,21 +14,22 @@ RUN ./mvnw dependency:go-offline -B -q
 
 COPY src ./src
 
-# Step 1: compile + process-aot
-# SPRING_MAIN_WEB_APPLICATION_TYPE=NONE is inherited by the forked JVM, preventing
-# Tomcat/Security from trying to start during AOT analysis (which would crash the fork)
+# Single-invocation build — critical for correct native compilation.
+#
+# Why SPRING_MAIN_WEB_APPLICATION_TYPE=NONE:
+#   spring-boot:process-aot forks a JVM to run the app and analyze it.
+#   In the Docker build environment the SERVLET context crashes the fork
+#   immediately (bug/env-mismatch in Spring Boot 4.0.5 with GraalVM JDK).
+#   NONE lets the fork complete and generate AOT sources + classes.
+#
+# Why single Maven invocation (not split into prepare-package + native:compile-no-fork):
+#   process-aot registers target/spring-aot/main/resources into the Maven
+#   project model IN MEMORY. native:compile-no-fork then reads that model
+#   and adds the directory to -H:ConfigurationFileDirectories automatically,
+#   which registers DemoApplication__ApplicationContextInitializer for
+#   Class.forName() reflection at runtime. Split invocations lose this state.
 RUN SPRING_MAIN_WEB_APPLICATION_TYPE=NONE \
-    ./mvnw -Pnative -DskipTests -B prepare-package
-
-# Step 2: merge spring-aot output into target/classes so native:compile-no-fork
-# finds DemoApplication__ApplicationContextInitializer and AOT reflection config
-# (native-image auto-discovers META-INF/native-image/** via classpath)
-RUN cp -r target/spring-aot/main/classes/. target/classes/ && \
-    cp -r target/spring-aot/main/resources/. target/classes/ && \
-    echo "AOT classes + resources merged into target/classes"
-
-# Step 3: native compilation — uses target/classes which now includes all AOT artifacts
-RUN ./mvnw -Pnative -DskipTests -B native:compile-no-fork
+    ./mvnw -Pnative -DskipTests -B package
 
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
