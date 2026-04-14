@@ -38,4 +38,4 @@ COPY --from=builder /build/target/demo /app/demo
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/demo"]
+ENTRYPOINT ["/app/demo", "--debug"]
