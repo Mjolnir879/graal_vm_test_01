@@ -19,20 +19,13 @@ RUN ./mvnw dependency:go-offline -B -q
 #   prepare-package → spring-boot:process-aot (generates DemoApplication__ApplicationContextInitializer)
 #   package         → native:compile-no-fork  (compiles binary with AOT classes on classpath)
 COPY src ./src
-RUN ./mvnw -Pnative -DskipTests -B package
+RUN ./mvnw -Pnative -DskipTests -B -e package
 
-# ── DIAGNOSTIC: remove these once the build works ──────────────────────────
-# Did process-aot generate the initializer?
-RUN echo "=== AOT generated classes ===" && \
+# ── DIAGNOSTIC ─────────────────────────────────────────────────────────────
+RUN echo "=== target/ contents ==" && ls -la target/ && \
+    echo "=== spring-aot (if exists) ===" && \
     find target/spring-aot -name "*.class" 2>/dev/null || echo "!! target/spring-aot NOT FOUND"
-
-# Is the initializer inside the native binary?
-RUN echo "=== Checking binary for AOT initializer ===" && \
-    strings target/demo | grep "ApplicationContextInitializer" || echo "!! Initializer NOT in binary"
-
-# What is target/demo actually?
-RUN echo "=== Binary info ===" && ls -la target/demo
-# ───────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
