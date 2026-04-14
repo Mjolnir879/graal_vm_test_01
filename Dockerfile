@@ -9,36 +9,25 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw
 
+# Cache dependencies
 RUN ./mvnw dependency:go-offline -B -q
 
 COPY src ./src
 
-# ── Step 1: compile + process-aot
-# SPRING_MAIN_WEB_APPLICATION_TYPE=NONE → herdado pelo forked JVM via env,
-# impede Tomcat/Security de tentarem iniciar durante a fase AOT
+# Step 1: compile + process-aot
+# SPRING_MAIN_WEB_APPLICATION_TYPE=NONE is inherited by the forked JVM, preventing
+# Tomcat/Security from trying to start during AOT analysis (which would crash the fork)
 RUN SPRING_MAIN_WEB_APPLICATION_TYPE=NONE \
     ./mvnw -Pnative -DskipTests -B prepare-package
 
-# ── Diagnóstico: onde foi parar o output do process-aot? ─────────────────────
-# Checa target/spring-aot E target/generated-sources E qualquer DemoApplication* gerado
-RUN echo "==== target/spring-aot (recursive) ====" && \
-    ls -laR target/spring-aot/ 2>/dev/null || echo "(vazio ou ausente)"
-RUN echo "==== target/generated-sources (recursive) ====" && \
-    find target/generated-sources -type f 2>/dev/null | sort || echo "(nada)"
-RUN echo "==== DemoApplication* anywhere in target ====" && \
-    find target -name "DemoApplication*" 2>/dev/null | sort
-RUN echo "==== All .class files NOT in target/classes or target/test-classes ====" && \
-    find target -name "*.class" \
-      ! -path "target/classes/*" \
-      ! -path "target/test-classes/*" 2>/dev/null | sort | head -20
-# ─────────────────────────────────────────────────────────────────────────────
+# Step 2: merge spring-aot output into target/classes so native:compile-no-fork
+# finds DemoApplication__ApplicationContextInitializer and AOT reflection config
+# (native-image auto-discovers META-INF/native-image/** via classpath)
+RUN cp -r target/spring-aot/main/classes/. target/classes/ && \
+    cp -r target/spring-aot/main/resources/. target/classes/ && \
+    echo "AOT classes + resources merged into target/classes"
 
-# ── Step 2: merge AOT classes into target/classes (se existirem)
-RUN cp -r target/spring-aot/main/classes/. target/classes/ 2>/dev/null \
-    && echo "AOT classes merged" \
-    || echo "No AOT classes to merge"
-
-# ── Step 3: native compilation
+# Step 3: native compilation — uses target/classes which now includes all AOT artifacts
 RUN ./mvnw -Pnative -DskipTests -B native:compile-no-fork
 
 # -------------------------------------------------------
