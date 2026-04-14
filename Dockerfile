@@ -1,30 +1,30 @@
-[INFO] Scanning for projects...
-[INFO] 
-[INFO] --------------------------< com.example:demo >--------------------------
-[INFO] Building  0.0.1-SNAPSHOT
-[INFO]   from pom.xml
-[INFO] --------------------------------[ jar ]---------------------------------
-[INFO] 
-[INFO] --- spring-boot:4.0.5:process-aot (default-cli) @ demo ---
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD FAILURE
-[INFO] ------------------------------------------------------------------------
-[INFO] Total time:  1.406 s
-[INFO] Finished at: 2026-04-14T20:52:41Z
-[INFO] ------------------------------------------------------------------------
-[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:4.0.5:process-aot (default-cli) on project demo: Unable to find a suitable main class, please add a 'mainClass' property -> [Help 1]
-[ERROR] 
-[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
-[ERROR] Re-run Maven using the -X switch to enable full debug logging.
-[ERROR] 
-[ERROR] For more information about the errors and possible solutions, please read the following articles:
-[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
-Dockerfile:35
--------------------
-34 |     COPY src ./src
-35 | >>> RUN mvn -Pnative -DskipTests -B \
-36 | >>>         spring-boot:process-aot \
-37 | >>>         native:compile
-38 |
--------------------
-ERROR: failed to build: failed to solve: process "/bin/sh -c mvn -Pnative -DskipTests -B         spring-boot:process-aot         native:compile" did not complete successfully: exit code: 1
+# -------------------------------------------------------
+# Stage 1: Build the GraalVM native image
+# -------------------------------------------------------
+FROM ghcr.io/graalvm/native-image-community:21 AS builder
+
+WORKDIR /app
+
+# Install Maven
+RUN microdnf install -y maven && microdnf clean all
+
+# Cache dependencies first
+COPY pom.xml .
+RUN mvn dependency:go-offline -B -q
+
+# Copy source and build native image
+COPY src ./src
+RUN mvn -Pnative -DskipTests -B native:compile
+
+# -------------------------------------------------------
+# Stage 2: Minimal runtime image
+# -------------------------------------------------------
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+COPY --from=builder /app/target/demo .
+
+EXPOSE 8080
+
+ENTRYPOINT ["./demo"]
