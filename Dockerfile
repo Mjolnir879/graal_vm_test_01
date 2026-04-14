@@ -21,6 +21,19 @@ RUN ./mvnw dependency:go-offline -B -q
 COPY src ./src
 RUN ./mvnw -Pnative -DskipTests -B package
 
+# ── DIAGNOSTIC: remove these once the build works ──────────────────────────
+# Did process-aot generate the initializer?
+RUN echo "=== AOT generated classes ===" && \
+    find target/spring-aot -name "*.class" 2>/dev/null || echo "!! target/spring-aot NOT FOUND"
+
+# Is the initializer inside the native binary?
+RUN echo "=== Checking binary for AOT initializer ===" && \
+    strings target/demo | grep "ApplicationContextInitializer" || echo "!! Initializer NOT in binary"
+
+# What is target/demo actually?
+RUN echo "=== Binary type ===" && file target/demo
+# ───────────────────────────────────────────────────────────────────────────
+
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
 # -------------------------------------------------------
