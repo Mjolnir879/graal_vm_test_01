@@ -6,7 +6,8 @@ FROM ghcr.io/graalvm/native-image-community:21 AS builder
 
 # Instala Maven diretamente do repositório oficial da Apache
 # e garante que o JAVA_HOME aponta para o GraalVM (não para outro JDK do PATH)
-ENV JAVA_HOME=/usr/lib/jvm/java-21-graalvm
+# Maven não está incluído na imagem — instala sem sobrescrever o JAVA_HOME
+# que a própria imagem ghcr.io/graalvm/native-image-community já define corretamente
 ENV MAVEN_HOME=/opt/apache-maven-3.9.6
 ENV PATH=$MAVEN_HOME/bin:$PATH
 
