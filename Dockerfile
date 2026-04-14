@@ -5,20 +5,21 @@ FROM ghcr.io/graalvm/native-image-community:21 AS builder
 
 WORKDIR /app
 
-# Install Maven
-RUN microdnf install -y maven && microdnf clean all
+# Copy Maven wrapper first (downloads Maven 3.9.x — required for Spring Boot 4)
+# microdnf installs Maven 3.6.x which is incompatible with Spring Boot 4 AOT
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+RUN chmod +x mvnw
 
-# Cache dependencies first
-COPY pom.xml .
-RUN mvn dependency:go-offline -B -q
+# Cache dependencies (wrapper auto-downloads Maven 3.9 on first run)
+RUN ./mvnw dependency:go-offline -B -q
 
 # Copy source and build native image
-# IMPORTANT: use 'package' (lifecycle phase) NOT 'native:compile' (direct goal).
-# 'package' triggers the full lifecycle including generate-sources, where
-# spring-boot:process-aot runs and generates DemoApplication__ApplicationContextInitializer.
-# Calling 'native:compile' directly SKIPS those phases → class never generated → AotInitializerNotFoundException at runtime.
+# 'package' runs the full lifecycle:
+#   prepare-package → spring-boot:process-aot (generates DemoApplication__ApplicationContextInitializer)
+#   package         → native:compile-no-fork  (compiles binary with AOT classes on classpath)
 COPY src ./src
-RUN mvn -Pnative -DskipTests -B package
+RUN ./mvnw -Pnative -DskipTests -B package
 
 # -------------------------------------------------------
 # Stage 2: Minimal runtime image
