@@ -31,7 +31,7 @@ RUN echo "=== Checking binary for AOT initializer ===" && \
     strings target/demo | grep "ApplicationContextInitializer" || echo "!! Initializer NOT in binary"
 
 # What is target/demo actually?
-RUN echo "=== Binary type ===" && file target/demo
+RUN echo "=== Binary info ===" && ls -la target/demo
 # ───────────────────────────────────────────────────────────────────────────
 
 # -------------------------------------------------------
