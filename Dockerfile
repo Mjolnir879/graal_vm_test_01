@@ -1,62 +1,30 @@
-# =============================================================================
-# Estágio 1: Build nativo
-# Usa a imagem oficial do GraalVM com native-image já instalado
-# =============================================================================
-FROM ghcr.io/graalvm/native-image-community:21 AS builder
-
-# Instala Maven sem sobrescrever o JAVA_HOME que a imagem já define corretamente
-ENV MAVEN_HOME=/opt/apache-maven-3.9.6
-ENV PATH=$MAVEN_HOME/bin:$PATH
-
-RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.tar.gz \
-    | tar -xzC /opt
-
-# Verifica que o ambiente está correto antes de qualquer coisa
-RUN echo "=== Java em uso ===" && java -version && \
-    echo "=== native-image ===" && native-image --version && \
-    echo "=== Maven ===" && mvn --version
-
-WORKDIR /build
-
-# ── Cache de dependências ────────────────────────────────────────────────────
-COPY pom.xml .
-RUN mvn dependency:go-offline -B -q
-
-# ── Build nativo em dois goals explícitos ───────────────────────────────────
-# Não confiamos no binding automático do lifecycle (-Pnative package) pois
-# ele pode variar conforme a versão do plugin e do wrapper.
-# Em vez disso, chamamos os goals diretamente na ordem correta:
-#
-#  1. spring-boot:process-aot  → gera target/spring-aot/ (o ApplicationContextInitializer)
-#  2. native:compile           → lê o classpath completo (incluindo AOT) e gera o binário
-#
-# O -DskipTests evita que testes rodem durante o build nativo.
-COPY src ./src
-RUN mvn -Pnative -DskipTests -B \
-        spring-boot:process-aot \
-        native:compile
-
-# Garante que o binário foi realmente gerado antes de prosseguir
-RUN test -f /build/target/demo || \
-    (echo "ERRO: binário nativo não foi gerado em target/demo" && \
-     echo "Conteúdo de target/:" && ls -la /build/target/ && exit 1)
-
-# =============================================================================
-# Estágio 2: Imagem de runtime mínima
-# =============================================================================
-FROM ubuntu:22.04
-
-# Dependências mínimas para executável nativo linkado dinamicamente (glibc)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libstdc++6 \
-    libc6 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-COPY --from=builder /build/target/demo /app/demo
-RUN chmod +x /app/demo
-
-EXPOSE 8080
-
-ENTRYPOINT ["/app/demo"]
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.example:demo >--------------------------
+[INFO] Building  0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- spring-boot:4.0.5:process-aot (default-cli) @ demo ---
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  1.406 s
+[INFO] Finished at: 2026-04-14T20:52:41Z
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:4.0.5:process-aot (default-cli) on project demo: Unable to find a suitable main class, please add a 'mainClass' property -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
+Dockerfile:35
+-------------------
+34 |     COPY src ./src
+35 | >>> RUN mvn -Pnative -DskipTests -B \
+36 | >>>         spring-boot:process-aot \
+37 | >>>         native:compile
+38 |
+-------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c mvn -Pnative -DskipTests -B         spring-boot:process-aot         native:compile" did not complete successfully: exit code: 1
